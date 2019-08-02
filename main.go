@@ -6,7 +6,7 @@ import (
 	"github.com/integrii/flaggy"
 )
 
-var testFile = "http://ipv6.download.thinkbroadband.com/50MB.zip"
+var testFile = "http://ipv4.download.thinkbroadband.com/50MB.zip"
 
 var flags struct {
 	json bool
