@@ -1,32 +1,88 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
-	"github.com/integrii/flaggy"
+	"github.com/cavaliercoder/grab"
+	uuid "github.com/nu7hatch/gouuid"
 )
 
-var testFile = "http://ipv4.download.thinkbroadband.com/50MB.zip"
+var err error
 
-var flags struct {
-	json bool
+var downloadPath = "/tmp"
+
+type jsonOutput struct {
+	Speed  int    `json:"speed"`
+	Metric string `json:"metric"`
 }
 
-func main() {
-	flaggy.SetName("gospeedtest")
-	flaggy.SetDescription("a simple internet speed-test cli written in go")
-	flaggy.SetVersion("0.0.1")
-	flaggy.Bool(&flags.json, "j", "json", "output as json")
-	flaggy.Parse()
+func handleError() {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unique id creation failed: %v\n", err)
+		os.Exit(1)
+	}
+}
 
-	mbps := downloadFile(testFile, flags.json)
+func outputText(speed int, metric string) {
+	fmt.Println(speed, metric)
+}
 
-	switch {
-	case flags.json:
-		outputJSON(mbps, "Mbps")
-	default:
-		outputText(mbps, "Mbps")
+func outputJSON(speed int, metric string) {
+	defer handleError()
+
+	resp := &jsonOutput{Speed: speed, Metric: metric}
+	respJSON, err := json.Marshal(resp)
+	if err != nil {
+		return
 	}
 
-	os.Exit(0)
+	println(string(respJSON))
+}
+
+func downloadFile(url string, hideBar bool) int {
+	defer handleError()
+
+	id, err := uuid.NewV4()
+	if err != nil {
+		return 0
+	}
+
+	fileExt := filepath.Ext(testFile)
+	downloadDest := downloadPath + "/" + id.String() + fileExt
+
+	client := grab.NewClient()
+	req, err := grab.NewRequest(downloadDest, testFile)
+	if err != nil {
+		return 0
+	}
+
+	resp := client.Do(req)
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+
+	done := false
+	for {
+		select {
+		case <-resp.Done:
+			done = true
+		}
+
+		if done {
+			break
+		}
+	}
+
+	if err := resp.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Download failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	mbps := int(resp.BytesPerSecond() * 0.000008)
+	os.Remove(downloadDest)
+
+	return mbps
 }
